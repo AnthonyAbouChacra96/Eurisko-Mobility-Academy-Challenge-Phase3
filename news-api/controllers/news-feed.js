@@ -4,6 +4,7 @@ const mainPath = require("../Util/path");
 const { validationResult } = require("express-validator/check");
 const Feed = require("../models/feed");
 const User = require("../models/user");
+const Category = require("../models/category");
 exports.getNews = (req, res, next) => {
   const currentPage = req.query.page || 1;
   const perPage = 2;
@@ -47,12 +48,14 @@ exports.postFeed = (req, res, next) => {
   const title = req.body.title;
   const content = req.body.content;
   const imageUrl = req.file.path;
-  let author;
+  const category = req.body.category;
+	let author;
   const feed = new Feed({
     title: title,
     content: content,
     imageUrl: imageUrl,
-    author: req.userId,
+		author: req.userId,
+		category:category,
   });
   feed
     .save()
@@ -63,6 +66,13 @@ exports.postFeed = (req, res, next) => {
       author = user;
       user.feeds.push(feed);
       return user.save();
+    })
+    .then((result) => {
+      return Category.findById(category);
+    })
+    .then((category) => {
+      category.feeds.push(feed);
+      return category.save();
     })
     .then((result) => {
       res.status(201).json({
@@ -94,6 +104,29 @@ exports.getFeed = (req, res, next) => {
     })
     .catch((err) => {
       if ((!err, statusCode)) {
+        err.statusCode = 500;
+      }
+      next(err);
+    });
+};
+exports.getFeedByCategoryId = (req, res, next) => {
+  const categoryId = req.params.categoryId;
+  Category.findById(categoryId)
+    .then((category) => {
+      if (!category) {
+        const error = new Error("Could not find Category");
+        error.statusCode = 404;
+        throw error;
+			}
+			return Feed.find({_id:{$in:category.feeds}});
+    }).then(feeds=>{
+			  res.status(200).json({
+        message: "Category Found",
+        feed: feeds,
+      });
+		})
+    .catch((err) => {
+      if ((!err.statusCode)) {
         err.statusCode = 500;
       }
       next(err);
@@ -146,7 +179,7 @@ exports.updateFeed = (req, res, next) => {
       });
     })
     .catch((err) => {
-      if ((!err.statusCode)) {
+      if (!err.statusCode) {
         err.statusCode = 500;
       }
       next(err);
@@ -154,6 +187,7 @@ exports.updateFeed = (req, res, next) => {
 };
 exports.deleteFeed = (req, res, next) => {
   const feedId = req.params.feedId;
+  let categoryId;
   Feed.findById(feedId)
     .then((feed) => {
       if (feed.author.toString() !== req.userId) {
@@ -167,9 +201,9 @@ exports.deleteFeed = (req, res, next) => {
         error.statusCode = 404;
         throw error;
       }
+      categoryId = feed.category;
       return Feed.findByIdAndRemove(feedId);
     })
-
     .then((result) => {
       return User.findById(req.userId);
     })
@@ -178,12 +212,19 @@ exports.deleteFeed = (req, res, next) => {
       return user.save();
     })
     .then((result) => {
+      return Category.findById(categoryId);
+    })
+    .then((category) => {
+      category.feeds.pull(feedId);
+      return category.save();
+    })
+    .then((result) => {
       res.status(200).json({
         message: "Deleted News-Feed",
       });
     })
     .catch((err) => {
-      if ((!err.statusCode)) {
+      if (!err.statusCode) {
         err.statusCode = 500;
       }
       next(err);

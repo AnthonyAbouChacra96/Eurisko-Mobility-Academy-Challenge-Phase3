@@ -6,6 +6,7 @@ const feedSchema = new Schema({
 	imageUrl: { type: String, required: true },
 	content: { type: String, required: true },
 	author: { type: Schema.Types.ObjectId, ref:'User',required:true},
+	category: { type: Schema.Types.ObjectId, ref:'Category',required:true},
 	
 },{timestamps:true});
 module.exports=mongoose.model('Feed',feedSchema);
